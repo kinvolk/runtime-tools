@@ -1,0 +1,36 @@
+# Golang CircleCI 2.0 configuration file
+#
+# Check https://circleci.com/docs/2.0/language-go/ for more details
+version: 2
+jobs:
+  build:
+    machine: true
+    #  image: circleci/classic:201711-01
+
+    #docker:
+    #  - image: circleci/golang:1.9
+
+    #working_directory: /go/src/github.com/opencontainers/runtime-tools
+    working_directory: /home/circleci/.go_workspace/src/github.com/opencontainers/runtime-tools
+    steps:
+      - checkout
+
+      # Debug
+      - run: set -x ; pwd ; uname -a ; tty ; env ; cat /proc/self/uid_map ; cat /proc/self/cgroup ; cat /proc/self/mountinfo ; ls -l /proc/self/ns/ ; cat /proc/self/net/unix ; sudo ls -l /proc ; sudo find /sys/fs/cgroup/systemd -type d ; ps aux ; cat /sys/fs/cgroup/systemd/cgroup.procs ; true
+      - run: set -x ; set +e ; id ; unshare -U -r -m id ; true
+      - run: dmesg ; true
+
+      # Install runc
+      - run: wget -q https://github.com/opencontainers/runc/releases/download/v1.0.0-rc5/runc.amd64
+      - run: sudo mv ./runc.amd64 /bin/runc && sudo chmod +x /bin/runc
+
+      # https://github.com/creationix/nvm#install-script
+      #- run: curl -o- https://raw.githubusercontent.com/creationix/nvm/v0.33.8/install.sh | bash
+      #- run: echo 'export NVM_DIR="$HOME/.nvm" ; . "$NVM_DIR/nvm.sh"' >> $BASH_ENV
+      #- run: nvm install node
+      #- run: printf '#!/bin/sh\nexec /home/circleci/.nvm/versions/node/v9.7.1/bin/node' | sudo tee /bin/node ; sudo chmod +x /bin/node
+      - run: npm install -g tap
+
+      - run: make
+      #- run: sudo TAP=$HOME/.nvm/versions/node/v9.7.1/bin/tap strace -f -s 512 make localvalidation
+      - run: sudo PATH=$PATH:$(dirname $(which node)) TAP=$(which tap) RUNTIME=runc make localvalidation
