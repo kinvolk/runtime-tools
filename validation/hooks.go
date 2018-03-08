@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"time"
@@ -18,6 +19,8 @@ func main() {
 	t := tap.New()
 	t.Header(0)
 
+	os.Setenv("VALIDATION_HOOKS", "variable in parent process")
+
 	var output string
 	config := util.LifecycleConfig{
 		Actions: util.LifecycleActionCreate | util.LifecycleActionStart | util.LifecycleActionDelete,
@@ -29,7 +32,7 @@ func main() {
 			err := g.AddPreStartHook(rspec.Hook{
 				Path: shPath,
 				Args: []string{
-					"sh", "-c", fmt.Sprintf("echo 'pre-start1 called' >> %s", output),
+					"sh", "-c", fmt.Sprintf("(echo -n $VALIDATION_HOOKS ; echo 'pre-start1 called') >> %s", output),
 				},
 			})
 			if err != nil {
@@ -38,7 +41,17 @@ func main() {
 			err = g.AddPreStartHook(rspec.Hook{
 				Path: shPath,
 				Args: []string{
-					"sh", "-c", fmt.Sprintf("echo 'pre-start2 called' >> %s", output),
+					"sh", "-c", fmt.Sprintf("(echo -n $VALIDATION_HOOKS ; echo '$MSG') >> %s", output),
+				},
+				Env: []string{"MSG=pre-start2 called"},
+			})
+			if err != nil {
+				return err
+			}
+			err = g.AddPostStartHook(rspec.Hook{
+				Path: shPath,
+				Args: []string{
+					"sh", "-c", fmt.Sprintf("(echo -n $VALIDATION_HOOKS ; echo 'post-start1 called') >> %s", output),
 				},
 			})
 			if err != nil {
@@ -47,16 +60,7 @@ func main() {
 			err = g.AddPostStartHook(rspec.Hook{
 				Path: shPath,
 				Args: []string{
-					"sh", "-c", fmt.Sprintf("echo 'post-start1 called' >> %s", output),
-				},
-			})
-			if err != nil {
-				return err
-			}
-			err = g.AddPostStartHook(rspec.Hook{
-				Path: shPath,
-				Args: []string{
-					"sh", "-c", fmt.Sprintf("echo 'post-start2 called' >> %s", output),
+					"sh", "-c", fmt.Sprintf("(echo -n $VALIDATION_HOOKS ; echo 'post-start2 called') >> %s", output),
 				},
 			})
 			if err != nil {
@@ -65,7 +69,7 @@ func main() {
 			err = g.AddPostStopHook(rspec.Hook{
 				Path: shPath,
 				Args: []string{
-					"sh", "-c", fmt.Sprintf("echo 'post-stop1 called' >> %s", output),
+					"sh", "-c", fmt.Sprintf("(echo -n $VALIDATION_HOOKS ; echo 'post-stop1 called') >> %s", output),
 				},
 			})
 			if err != nil {
@@ -74,7 +78,7 @@ func main() {
 			err = g.AddPostStopHook(rspec.Hook{
 				Path: shPath,
 				Args: []string{
-					"sh", "-c", fmt.Sprintf("echo 'post-stop2 called' >> %s", output),
+					"sh", "-c", fmt.Sprintf("(echo -n $VALIDATION_HOOKS ; echo 'post-stop2 called') >> %s", output),
 				},
 			})
 			if err != nil {
@@ -92,10 +96,14 @@ func main() {
 
 	err := util.RuntimeLifecycleValidate(config)
 	outputData, _ := ioutil.ReadFile(output)
-	if err == nil && string(outputData) != "pre-start1 called\npre-start2 called\npost-start1\npost-start2\npost-stop1\npost-stop2\n" {
+	expected := "pre-start1 called\npre-start2 called\npost-start1\npost-start2\npost-stop1\npost-stop2\n"
+	if err == nil && string(outputData) != expected {
 		err := specerror.NewError(specerror.PosixHooksCalledInOrder, fmt.Errorf("Hooks MUST be called in the listed order"), rspec.Version)
 		diagnostic := map[string]string{
-			"error": err.Error(),
+			"error":    err.Error(),
+			"expected": expected,
+			"result":   string(outputData),
+			"output":   output,
 		}
 		t.YAML(diagnostic)
 	} else {

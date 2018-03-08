@@ -200,10 +200,10 @@ func (r *Runtime) Clean(removeBundle bool, forceRemoveBundle bool) error {
 	err := r.Delete()
 
 	if removeBundle && (err == nil || forceRemoveBundle) {
-		err2 := os.RemoveAll(r.bundleDir())
-		if err2 != nil && err == nil {
-			err = err2
-		}
+		//err2 := os.RemoveAll(r.bundleDir())
+		//if err2 != nil && err == nil {
+		//	err = err2
+		//}
 	}
 
 	return err
